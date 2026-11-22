@@ -1,44 +1,76 @@
 # Floor Area Navigator
 
-Automatically builds a **Floor → Area → Controls** navigation card from the Home Assistant floor, area, device and entity registries.
+A **standalone, self-populating Home Assistant dashboard** that opens like Dwains Dashboard, with three-level navigation:
 
-- Floor buttons: choose the floor
-- Area buttons: see only rooms assigned to that floor
-- Controls: lights, covers/shutters, switches, fans, climate, scenes, scripts, cameras, media players, sensors and more
-- Works entirely via your local Home Assistant frontend, no cloud or external login
-- Existing dashboards are left unchanged
+**Floor → Area → Controls**
 
-## Install (Home Assistant 2026.11+)
+It automatically reads the Home Assistant floor, area, device and entity registries. Select a floor, then a room and control its lights, shutters/covers, climate, switches, fans, scenes, scripts and media players. Sensors and cameras are also available.
 
-1. **Settings → Marketplace → Add from link**.
-2. Paste `https://github.com/arisgia/floor-area-navigator`.
-3. Select **Dashboard** and install, then refresh your browser.
-4. **Settings → Dashboards → Add dashboard**. Create a new dashboard.
-5. Edit it, **Add card → Manual**, and paste:
+## Quick installation — no YAML
 
-```yaml
-type: custom:floor-area-navigator
-title: Το σπίτι μου
-```
+**Requirements:** Home Assistant **2026.5+** and HACS / Marketplace.
 
-For a full-width dashboard, use a Panel view. Marketplace will register the JavaScript resource automatically unless you manage dashboard resources in YAML.
+1. Open **Settings → Marketplace** (or **HACS** on earlier versions).
+2. Find your installed **Floor Area Navigator** custom repository.
+3. **Update / Redownload** it to get the new **standalone dashboard strategy**.
+4. Refresh Home Assistant in your browser (Windows: **Ctrl + F5**).
+5. Open **Settings → Dashboards → Add dashboard**.
+6. Under **Community dashboards**, click **Floor Area Navigator**.
+7. Enter a name and click **Create**.
 
-## Install on older Home Assistant with HACS
+The dashboard generates its own full-width view automatically. You do **not** need a blank dashboard, Raw configuration editor, YAML or Manual card.
 
-HACS → top-right menu → **Custom repositories** → add this URL as **Dashboard** → install → refresh browser → add the manual card above.
+> **Already installed the old card-only version?** You must update/re-download the repository first, then reload the Home Assistant frontend. The older 1.x version only provided a card, so it did not appear under Community dashboards.
 
-## Important
+## How it works
 
-Assign Areas to Floors under **Settings → Areas, labels & zones**, and assign devices/entities to their relevant Area. Floor/Area buttons and devices are discovered automatically. No entity IDs or token needed.
+- **Floor:** select from existing floors, sorted by level.
+- **Area:** choose a room assigned to the selected floor.
+- **Controls:** auto-discovered Home Assistant entities in that room; grouping by domain.
+- Devices inherit their Area assignments; explicit entity Area assignments take priority.
+- Rooms without a floor can be found under **Χωρίς όροφο**.
+- A **refresh** button reloads registry metadata when you change floors, areas or devices.
+- Uses only local Home Assistant APIs and authenticated frontend calls. No eWeLink cloud or API tokens required.
 
-The install adds **a card**, not a complete preconfigured dashboard. You create the new dashboard once; the Floors/Areas and device controls then populate automatically.
+### First-time configuration
 
-## Update
+In Home Assistant, go to **Settings → Areas, labels & zones**, define Floors, assign Areas to the right floor, and make sure entities or their devices belong to the appropriate Area. This is what drives the menu — it is **not hardcoded**.
 
-Update from Marketplace or HACS and refresh the browser. No changes are required to existing dashboards.
+## Compatibility and backward support
 
-## Notes
+- **Native community dashboard**: added in v2.0 through `ll-strategy-dashboard-floor-area-navigator` and `window.customStrategies` (Home Assistant 2026.5+).
+- **Dashboard strategy YAML fallback**:
+  ```yaml
+  strategy:
+    type: custom:floor-area-navigator
+  ```
+- **Old custom card remains available**:
+  ```yaml
+  type: custom:floor-area-navigator
+  title: Το σπίτι μου
+  ```
+- HACS / Marketplace installs the single `dist/floor-area-navigator.js` resource (from `hacs.json`). No manual files or additional dependencies.
+- Your existing dashboards and all Home Assistant configuration remain untouched.
 
-- Control buttons operate the real Home Assistant entities; do not use them until you are ready to control the devices.
-- For climate, buttons adjust target temperature using the entity's configured step.
-- Clicking **⋯** opens the standard Home Assistant more-info dialog.
+## Troubleshooting
+
+**Not shown under Community dashboards**
+1. Confirm the installed resource is the latest version after an Update / Redownload (initial old installs still load the old JS until updated).
+2. Refresh the Home Assistant tab with **Ctrl+F5** or reopen the app.
+3. Ensure the JS module appears under Dashboard Resources and loads without 404 errors.
+4. Home Assistant 2026.5 or newer is required for the Community dashboards picker.
+
+**Dashboard created but empty**: Assign Areas to Floors and devices/entities to Areas; reload.
+
+**Cannot load strategy**: Check browser console for `ll-strategy-dashboard-floor-area-navigator`, verify dashboard resource loaded, and refresh.
+
+## Source layout
+
+- `dist/floor-area-navigator.js` — self-contained dashboard strategy + UI card
+- `hacs.json` — Dashboard resource metadata
+- `examples/dashboard.yaml` — optional legacy/manual example
+- `ΟΔΗΓΙΕΣ_ΕΛΛΗΝΙΚΑ.md` — Greek instructions
+
+## Version
+
+2.0.0 — stand-alone dashboard strategy introduced. First-time runtime verification in your actual HA instance is still needed.

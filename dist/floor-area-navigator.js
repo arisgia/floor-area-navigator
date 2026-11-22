@@ -1,7 +1,9 @@
-/* Floor Area Navigator 1.1 - Home Assistant dashboard card. No external dependencies. */
+/* Floor Area Navigator 2.0 - standalone HA dashboard strategy + card. No external dependencies. */
 (() => {
   'use strict';
-  if (customElements.get('floor-area-navigator')) return;
+  // Guard against loading the same frontend resource twice in one page session.
+  if (window.__floorAreaNavigatorModuleLoaded) return;
+  window.__floorAreaNavigatorModuleLoaded = true;
   const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const GROUPS = [
     ['light','Φώτα','💡'],['cover','Ρολά / Σκίαση','🪟'],['climate','Θέρμανση / Ψύξη','🌡️'],
@@ -171,7 +173,70 @@
       }
     }
   }
-  customElements.define('floor-area-navigator',FloorAreaNavigator);
+  // Home Assistant 2026.5+ native dashboard strategy. Registers in the Community dashboards picker.
+  // It generates a full panel dashboard from the existing self-populating card:
+  // no YAML and no static list of rooms or entities are required.
+  class FloorAreaDashboardStrategy extends HTMLElement {
+    static noEditor = true;
+    static registryDependencies = ['floors', 'areas', 'devices', 'entities'];
+    static getCreateSuggestions() {
+      return { title: 'Το σπίτι μου', icon: 'mdi:home-floor-1' };
+    }
+    static async generate(config) {
+      const title = config?.title || 'Το σπίτι μου';
+      return {
+        title,
+        views: [{
+          title,
+          path: 'home',
+          icon: 'mdi:home',
+          panel: true,
+          cards: [{
+            type: 'custom:floor-area-navigator',
+            title
+          }]
+        }]
+      };
+    }
+  }
+
+  // HA can replace the CustomElementRegistry while booting. Register into the
+  // current registry again if that happens, preventing 5-second strategy timeouts.
+  const registerComponents = () => {
+    const registry = window.customElements;
+    if (!registry.get('floor-area-navigator')) {
+      registry.define('floor-area-navigator', FloorAreaNavigator);
+    }
+    if (!registry.get('ll-strategy-dashboard-floor-area-navigator')) {
+      registry.define('ll-strategy-dashboard-floor-area-navigator', FloorAreaDashboardStrategy);
+    }
+  };
+  registerComponents();
+
+  const bootRegistry = window.customElements;
+  bootRegistry.whenDefined('home-assistant').then(registerComponents, () => undefined);
+  let registryChecks = 0;
+  const checkRegistry = () => {
+    if (registryChecks++ >= 40) return;
+    registerComponents();
+    if (window.customElements === bootRegistry && !window.customElements.get('home-assistant')) {
+      window.setTimeout(checkRegistry, 250);
+    } else if (window.customElements !== bootRegistry) {
+      window.setTimeout(registerComponents, 1000);
+    }
+  };
+  window.setTimeout(checkRegistry, 250);
+
+  window.customStrategies = Array.isArray(window.customStrategies) ? window.customStrategies : [];
+  if (!window.customStrategies.some(s => s.type === 'floor-area-navigator' && s.strategyType === 'dashboard')) {
+    window.customStrategies.push({
+      type: 'floor-area-navigator',
+      strategyType: 'dashboard',
+      name: 'Floor Area Navigator',
+      description: 'Αυτόματο dashboard: Όροφος → Δωμάτιο → Χειριστήρια. Χωρίς YAML.',
+      documentationURL: 'https://github.com/arisgia/floor-area-navigator'
+    });
+  }
   window.customCards=window.customCards||[];
   window.customCards.push({type:'floor-area-navigator',name:'Όροφοι → Δωμάτια → Χειριστήρια',description:'Αυτόματη πλοήγηση μέσω Floors, Areas και Entities',preview:false});
 })();

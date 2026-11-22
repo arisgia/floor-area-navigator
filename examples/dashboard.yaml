@@ -1,0 +1,8 @@
+title: Το σπίτι μου
+views:
+  - title: Όροφοι
+    path: floors
+    type: panel
+    cards:
+      - type: custom:floor-area-navigator
+        title: Το σπίτι μου

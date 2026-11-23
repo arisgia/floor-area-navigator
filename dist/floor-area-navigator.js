@@ -1,4 +1,4 @@
-/* Floor Area Navigator 2.0 - standalone HA dashboard strategy + card. No external dependencies. */
+/* Floor Area Navigator 2.1 - automatic registry synchronization, standalone dashboard + card. */
 (() => {
   'use strict';
   // Guard against loading the same frontend resource twice in one page session.
@@ -22,28 +22,85 @@
       this.floors=[]; this.areas=[]; this.devices=new Map(); this.entities=[];
       this.floor=null; this.area=null; this.loaded=false; this.loading=false;
       this.error=''; this.signature='';
+      this.watchingConnection=null; this.unsubscribers=[]; this.refreshTimer=null; this.pollTimer=null;
+      this.focusListener=null; this.visibilityListener=null; this.pendingRefresh=false;
     }
     static getStubConfig(){return {title:'Το σπίτι μου'};}
     getCardSize(){return 8;}
     getGridOptions(){return {columns:'full', min_columns:9};}
     setConfig(config){this.config=config||{}; if(this.isConnected)this.render();}
     connectedCallback(){
-      this.shadowRoot.addEventListener('click',ev=>this.click(ev));
+      if(!this.clickListener){
+        this.clickListener=ev=>this.click(ev);
+        this.shadowRoot.addEventListener('click',this.clickListener);
+      }
       this.render();
+      this.startWatching();
       if(this.ha&&!this.loaded)this.load();
+    }
+    disconnectedCallback(){
+      this.stopWatching();
     }
     set hass(value){
       this.ha=value;
       if(!this.isConnected)return;
+      this.startWatching();
       if(!this.loaded&&!this.loading)this.load();
       else if(this.loaded){
         const sig=this.currentEntities().map(e=>{const s=this.ha.states[e.entity_id];return e.entity_id+':'+s?.last_updated+':'+s?.state;}).join('|');
         if(sig!==this.signature)this.render();
       }
     }
+    startWatching(){
+      const conn=this.ha?.connection;
+      if(!this.isConnected||!conn||this.watchingConnection===conn)return;
+      this.stopWatching();
+      this.watchingConnection=conn;
+      // Registry updates are published on the Home Assistant event bus.
+      // Subscribing is near-real-time; the poll is a safety net if an event is missed.
+      if(typeof conn.subscribeEvents==='function'){
+        for(const type of ['floor_registry_updated','area_registry_updated','device_registry_updated','entity_registry_updated']){
+          Promise.resolve().then(()=>conn.subscribeEvents(()=>this.scheduleRefresh(),type))
+            .then(unsubscribe=>{
+              if(typeof unsubscribe!=='function')return;
+              if(this.isConnected&&this.watchingConnection===conn)this.unsubscribers.push(unsubscribe);
+              else unsubscribe();
+            })
+            .catch(error=>console.warn('[Floor Area Navigator] Subscription unavailable:',type,error));
+        }
+      }
+      this.pollTimer=window.setInterval(()=>this.scheduleRefresh(),60000);
+      this.focusListener=()=>this.scheduleRefresh();
+      window.addEventListener('focus',this.focusListener);
+      this.visibilityListener=()=>{if(!document.hidden)this.scheduleRefresh();};
+      document.addEventListener('visibilitychange',this.visibilityListener);
+    }
+    stopWatching(){
+      this.watchingConnection=null;
+      for(const unsubscribe of this.unsubscribers){
+        try{unsubscribe();}catch(error){console.warn('[Floor Area Navigator] Unsubscribe:',error);}
+      }
+      this.unsubscribers=[];
+      if(this.pollTimer!==null){window.clearInterval(this.pollTimer);this.pollTimer=null;}
+      if(this.refreshTimer!==null){window.clearTimeout(this.refreshTimer);this.refreshTimer=null;}
+      if(this.focusListener){window.removeEventListener('focus',this.focusListener);this.focusListener=null;}
+      if(this.visibilityListener){document.removeEventListener('visibilitychange',this.visibilityListener);this.visibilityListener=null;}
+      this.pendingRefresh=false;
+    }
+    scheduleRefresh(){
+      if(!this.isConnected||!this.ha)return;
+      if(this.refreshTimer!==null)window.clearTimeout(this.refreshTimer);
+      // A single addition can emit multiple device + entity events; coalesce them.
+      this.refreshTimer=window.setTimeout(()=>{
+        this.refreshTimer=null;
+        this.load(true);
+      },900);
+    }
     async load(force=false){
-      if(!this.ha||this.loading||(this.loaded&&!force))return;
-      this.loading=true;this.error='';this.render();
+      if(!this.ha||(this.loaded&&!force))return;
+      if(this.loading){if(force)this.pendingRefresh=true;return;}
+      this.loading=true;this.error='';
+      if(!this.loaded)this.render();
       try{
         const [floors,areas,devices,entities]=await Promise.all([
           this.ha.callWS({type:'config/floor_registry/list'}),
@@ -59,7 +116,14 @@
         if(!opts.some(f=>f.id===this.floor))this.floor=opts[0]?.id??null;
         this.validateArea();this.loaded=true;
       }catch(err){this.error=String(err?.message||err);}
-      finally{this.loading=false;this.render();}
+      finally{
+        this.loading=false;this.render();
+        // If an update arrives during a registry fetch, fetch once more.
+        if(this.pendingRefresh){
+          this.pendingRefresh=false;
+          this.scheduleRefresh();
+        }
+      }
     }
     floorOptions(){
       const list=this.floors.map(f=>({id:f.floor_id,name:f.name,icon:f.icon||'🏠'}));
@@ -106,7 +170,7 @@
       const root=this.shadowRoot;if(!root)return;
       const floors=this.floorOptions(),areas=this.floorAreas(),selected=floors.find(f=>f.id===this.floor),room=this.areas.find(a=>a.area_id===this.area);
       const entities=this.currentEntities();
-      const body=this.loading?'<div class="notice">Φόρτωση…</div>':this.error?'<div class="notice">Σφάλμα: '+escapeHtml(this.error)+'</div>':!floors.length?
+      const body=(this.loading&&!this.loaded)?'<div class="notice">Φόρτωση…</div>':(this.error&&!this.loaded)?'<div class="notice">Σφάλμα: '+escapeHtml(this.error)+'</div>':!floors.length?
         '<div class="notice">Δημιούργησε πρώτα Floors και Areas στις Ρυθμίσεις του Home Assistant.</div>':
         '<h3>1. Επίλεξε όροφο</h3><div class="grid floors">'+floors.map(f=>
           '<button class="choice '+(this.floor===f.id?'chosen':'')+'" data-floor="'+escapeHtml(f.id)+'">'+icon(f.icon,'🏠')+'<span>'+escapeHtml(f.name)+'</span></button>').join('')+'</div>'+

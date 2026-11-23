@@ -24,12 +24,13 @@ The dashboard generates its own full-width view automatically. You do **not** ne
 
 ## How it works
 
-- **Floor:** select from existing floors, sorted by level.
+- **Floor:** select from existing floors in **physical ascending order**: basement(s) → ground → 1st → 2nd → roof. Uses explicit Home Assistant numeric floor level when configured; falls back to recognized Greek/English floor names when levels are missing or identical.
 - **Area:** choose a room assigned to the selected floor.
 - **Controls:** auto-discovered Home Assistant entities in that room; grouping by domain.
 - Devices inherit their Area assignments; explicit entity Area assignments take priority.
 - Rooms without a floor can be found under **Χωρίς όροφο**.
-- A **refresh** button reloads registry metadata when you change floors, areas or devices.
+- **Live sync:** watches HA registry update events for floors, areas, devices and entities. A fallback refresh runs every 30 seconds while the dashboard is open, plus on tab focus. The selected floor/area stays selected whenever possible.
+- The manual **refresh** button is optional.
 - Uses only local Home Assistant APIs and authenticated frontend calls. No eWeLink cloud or API tokens required.
 
 ### First-time configuration
@@ -73,4 +74,4 @@ In Home Assistant, go to **Settings → Areas, labels & zones**, define Floors, 
 
 ## Version
 
-2.0.0 — stand-alone dashboard strategy introduced. First-time runtime verification in your actual HA instance is still needed.
+2.2.0 — automatic registry sync + physical floor order. Dashboard strategy introduced in v2.0. Changes have passed syntax and simulated registration/ordering/device-add tests; not yet verified in the user's running instance.

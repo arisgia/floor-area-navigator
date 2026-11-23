@@ -28,7 +28,7 @@ The dashboard generates its own full-width view automatically. You do **not** ne
 
 An **all-house Scripts** section now appears before the floor buttons. It discovers **all active `script.*` entities** in Home Assistant, even when a script isn't assigned to an Area. Scripts are alphabetically sorted by their display names.
 
-- Click **▶ Εκτέλεση** on a script to call `script.turn_on`.
+- Each script displays as a **single button containing only its name** (no icon, MDI text, ellipsis or secondary label). Click anywhere on the button to call `script.turn_on`.
 - Click **⋯** on its tile for Home Assistant's More Info panel.
 - Scripts created, renamed, or removed while the dashboard is open update automatically as the Home Assistant entity states change. The existing registry event listeners and 30-second fallback continue to handle device and area changes.
 - Scripts unavailable to Home Assistant cannot be run and their buttons are disabled.
@@ -100,4 +100,4 @@ In Home Assistant, go to **Settings → Areas, labels & zones**, define Floors, 
 
 ## Version
 
-2.3.0 — global auto-updating scripts panel and visual editors (strategy + card); retains v2.2 automatic registry sync and floor ordering. Syntax and simulated frontend tests passed; final real-device verification is still needed.
+2.4.0 — name-only full-width script action buttons. v2.3 global auto-updating scripts and visual editor, v2.2 automatic registry sync and floor ordering are retained. Syntax and simulated frontend action tests passed; real-device verification still needed.

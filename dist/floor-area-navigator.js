@@ -1,4 +1,4 @@
-/* Floor Area Navigator 2.3 - global live Scripts + visual dashboard/card editor. */
+/* Floor Area Navigator 2.4 - streamlined single-click script buttons + visual editor. */
 (() => {
   'use strict';
   // Guard against loading the same frontend resource twice in one page session.
@@ -206,11 +206,9 @@
       const list=scripts.map(({id,state})=>{
         const disabled=['unknown','unavailable'].includes(state.state);
         const label=escapeHtml(this.name(id)),entity=escapeHtml(id);
-        return '<div class="script-item"><button class="script-run" data-run="'+entity+'"'+
-          (disabled?' disabled':'')+' title="Εκτέλεση: '+label+'">'+
-          '<span class="script-glyph">'+icon(state.attributes?.icon,'mdi:script-text-play')+'</span>'+
-          '<span class="script-name">'+label+'</span><span class="script-action">▶ Εκτέλεση</span></button>'+
-          '<button class="script-info" data-info="'+entity+'" title="Πληροφορίες">⋯</button></div>';
+        // The whole tile is the action. No MDI text, icon, more-info or secondary action.
+        return '<button class="script-run" data-run="'+entity+'"'+
+          (disabled?' disabled':'')+' title="Εκτέλεση: '+label+'">'+label+'</button>';
       }).join('');
       return '<section class="global-scripts"><div class="section-header"><h3>⚡ '+heading+
         ' <em>('+scripts.length+')</em></h3><button class="section-toggle" data-toggle-scripts="1" aria-expanded="'+
@@ -281,13 +279,11 @@
         .section-toggle{padding:8px 12px;border-radius:10px;background:var(--secondary-background-color)}
         .global-scripts{border-bottom:1px solid var(--divider-color);padding-bottom:18px;margin-bottom:10px}
         .scripts{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
-        .script-item{display:flex;align-items:stretch;border:1px solid var(--divider-color);border-radius:14px;overflow:hidden;min-width:0;background:var(--card-background-color)}
-        .script-run{flex:1;min-height:83px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:12px 7px;min-width:0}
-        .script-run:hover:not(:disabled){background:var(--secondary-background-color)}
-        .script-glyph ha-icon{--mdc-icon-size:26px}
-        .script-name{font-size:14px;font-weight:600;overflow-wrap:anywhere;text-align:center}
-        .script-action{font-size:12px;color:var(--secondary-text-color)}
-        .script-info{width:35px;flex-shrink:0;background:var(--secondary-background-color)}
+        .script-run{display:flex;align-items:center;justify-content:center;min-height:70px;width:100%;padding:15px 12px;
+          border:1px solid var(--divider-color);border-radius:14px;min-width:0;overflow-wrap:anywhere;
+          background:var(--card-background-color);font-size:14px;font-weight:600;text-align:center}
+        .script-run:hover:not(:disabled){background:var(--secondary-background-color);border-color:var(--primary-color)}
+        .script-run:active:not(:disabled){opacity:.75}
         .floors{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
         .areas{grid-template-columns:repeat(auto-fit,minmax(115px,1fr))}
         .controls{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}

@@ -1,4 +1,4 @@
-/* Floor Area Navigator 2.2 - automatic registry synchronization + physical floor ordering. */
+/* Floor Area Navigator 2.3 - global live Scripts + visual dashboard/card editor. */
 (() => {
   'use strict';
   // Guard against loading the same frontend resource twice in one page session.
@@ -64,11 +64,20 @@
       this.error=''; this.signature='';
       this.watchingConnection=null; this.unsubscribers=[]; this.refreshTimer=null; this.pollTimer=null;
       this.focusListener=null; this.visibilityListener=null; this.pendingRefresh=false;
+      this.scriptsCollapsed=null;
     }
-    static getStubConfig(){return {title:'Το σπίτι μου'};}
+    static getStubConfig(){return {title:'Το σπίτι μου',show_scripts:true};}
+    static getConfigElement(){return document.createElement('floor-area-navigator-editor');}
     getCardSize(){return 8;}
     getGridOptions(){return {columns:'full', min_columns:9};}
-    setConfig(config){this.config=config||{}; if(this.isConnected)this.render();}
+    setConfig(config){
+      const next=config||{};
+      if(this.scriptsCollapsed===null || this.config?.scripts_collapsed!==next.scripts_collapsed){
+        this.scriptsCollapsed=next.scripts_collapsed===true;
+      }
+      this.config=next;
+      if(this.isConnected)this.render();
+    }
     connectedCallback(){
       if(!this.clickListener){
         this.clickListener=ev=>this.click(ev);
@@ -87,7 +96,7 @@
       this.startWatching();
       if(!this.loaded&&!this.loading)this.load();
       else if(this.loaded){
-        const sig=this.currentEntities().map(e=>{const s=this.ha.states[e.entity_id];return e.entity_id+':'+s?.last_updated+':'+s?.state;}).join('|');
+        const sig=this.currentEntities().map(e=>{const s=this.ha.states[e.entity_id];return e.entity_id+':'+s?.last_updated+':'+s?.state;}).join('|')+'|scripts:'+this.scriptSignature();
         if(sig!==this.signature)this.render();
       }
     }
@@ -177,6 +186,39 @@
       return this.entities.filter(e=>(e.area_id||this.devices.get(e.device_id)?.area_id)===this.area&&this.ha.states[e.entity_id])
         .sort((a,b)=>this.name(a.entity_id).localeCompare(this.name(b.entity_id),'el'));
     }
+    allScripts(){
+      if(!this.ha?.states)return [];
+      // All active Home Assistant script entities, including scripts without an Area.
+      // Disabled scripts have no state, so they cannot be executed from this dashboard.
+      return Object.entries(this.ha.states).filter(([id])=>id.startsWith('script.'))
+        .map(([id,state])=>({id,state}))
+        .sort((a,b)=>this.name(a.id).localeCompare(this.name(b.id),'el',{numeric:true}));
+    }
+    scriptSignature(){
+      if(this.config.show_scripts===false||!this.ha)return '';
+      return this.allScripts().map(({id,state})=>[id,state.state,state.last_updated,
+        state.attributes?.friendly_name,state.attributes?.icon].join(':')).join('|');
+    }
+    renderScripts(){
+      if(this.config.show_scripts===false)return '';
+      const scripts=this.allScripts();
+      const heading=escapeHtml(this.config.scripts_title||'Scripts · Γρήγορες εντολές');
+      const list=scripts.map(({id,state})=>{
+        const disabled=['unknown','unavailable'].includes(state.state);
+        const label=escapeHtml(this.name(id)),entity=escapeHtml(id);
+        return '<div class="script-item"><button class="script-run" data-run="'+entity+'"'+
+          (disabled?' disabled':'')+' title="Εκτέλεση: '+label+'">'+
+          '<span class="script-glyph">'+icon(state.attributes?.icon,'mdi:script-text-play')+'</span>'+
+          '<span class="script-name">'+label+'</span><span class="script-action">▶ Εκτέλεση</span></button>'+
+          '<button class="script-info" data-info="'+entity+'" title="Πληροφορίες">⋯</button></div>';
+      }).join('');
+      return '<section class="global-scripts"><div class="section-header"><h3>⚡ '+heading+
+        ' <em>('+scripts.length+')</em></h3><button class="section-toggle" data-toggle-scripts="1" aria-expanded="'+
+        (!this.scriptsCollapsed)+'">'+(this.scriptsCollapsed?'Εμφάνιση ▾':'Σύμπτυξη ▴')+
+        '</button></div>'+(this.scriptsCollapsed?'':'<div class="grid scripts">'+
+        (list||'<div class="notice">Δεν υπάρχουν scripts στο Home Assistant.</div>')+
+        '</div>')+'</section>';
+    }
     name(id){return this.ha?.states[id]?.attributes?.friendly_name||id;}
     state(s){if(!s)return 'Άγνωστο';try{return this.ha.formatEntityState(s);}catch{return s.state;}}
     entity(e){
@@ -210,7 +252,8 @@
       const root=this.shadowRoot;if(!root)return;
       const floors=this.floorOptions(),areas=this.floorAreas(),selected=floors.find(f=>f.id===this.floor),room=this.areas.find(a=>a.area_id===this.area);
       const entities=this.currentEntities();
-      const body=(this.loading&&!this.loaded)?'<div class="notice">Φόρτωση…</div>':(this.error&&!this.loaded)?'<div class="notice">Σφάλμα: '+escapeHtml(this.error)+'</div>':!floors.length?
+      const scriptsSection=this.renderScripts();
+      const body=(this.loading&&!this.loaded)?'<div class="notice">Φόρτωση…</div>':(this.error&&!this.loaded)?'<div class="notice">Σφάλμα: '+escapeHtml(this.error)+'</div>':scriptsSection+(!floors.length?
         '<div class="notice">Δημιούργησε πρώτα Floors και Areas στις Ρυθμίσεις του Home Assistant.</div>':
         '<h3>1. Επίλεξε όροφο</h3><div class="grid floors">'+floors.map(f=>
           '<button class="choice '+(this.floor===f.id?'chosen':'')+'" data-floor="'+escapeHtml(f.id)+'">'+icon(f.icon,'🏠')+'<span>'+escapeHtml(f.name)+'</span></button>').join('')+'</div>'+
@@ -220,7 +263,7 @@
         (entities.length?GROUPS.map(([domain,label,glyph])=>{
           const group=entities.filter(e=>e.entity_id.startsWith(domain+'.'));
           return group.length?'<section><h4>'+glyph+' '+escapeHtml(label)+' ('+group.length+')</h4><div class="grid controls">'+group.map(e=>this.entity(e)).join('')+'</div></section>':'';
-        }).join(''):'<div class="notice">Δεν βρέθηκαν entities στο επιλεγμένο Area.</div>');
+        }).join(''):'<div class="notice">Δεν βρέθηκαν entities στο επιλεγμένο Area.</div>'));
       root.innerHTML=`<style>
         :host{display:block;color:var(--primary-text-color);font-family:Roboto,Arial,sans-serif}
         ha-card{padding:clamp(14px,2vw,28px);border-radius:18px}
@@ -232,7 +275,20 @@
         h4{font-size:15px;margin:16px 0 9px}
         em{font-style:normal;color:var(--secondary-text-color);font-size:13px;font-weight:400;margin-left:7px}
         .refresh{padding:9px 12px;border-radius:10px;background:var(--secondary-background-color)}
-        .grid{display:grid;gap:10px}.floors{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
+        .grid{display:grid;gap:10px}
+        .section-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+        .section-header h3{margin:18px 0 10px}
+        .section-toggle{padding:8px 12px;border-radius:10px;background:var(--secondary-background-color)}
+        .global-scripts{border-bottom:1px solid var(--divider-color);padding-bottom:18px;margin-bottom:10px}
+        .scripts{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
+        .script-item{display:flex;align-items:stretch;border:1px solid var(--divider-color);border-radius:14px;overflow:hidden;min-width:0;background:var(--card-background-color)}
+        .script-run{flex:1;min-height:83px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:12px 7px;min-width:0}
+        .script-run:hover:not(:disabled){background:var(--secondary-background-color)}
+        .script-glyph ha-icon{--mdc-icon-size:26px}
+        .script-name{font-size:14px;font-weight:600;overflow-wrap:anywhere;text-align:center}
+        .script-action{font-size:12px;color:var(--secondary-text-color)}
+        .script-info{width:35px;flex-shrink:0;background:var(--secondary-background-color)}
+        .floors{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
         .areas{grid-template-columns:repeat(auto-fit,minmax(115px,1fr))}
         .controls{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
         .choice{min-height:95px;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -248,9 +304,9 @@
         .primary.active{background:var(--primary-color);color:white}
         .actions{display:flex;gap:5px}.actions button{flex:1}
         .dim{opacity:.65}.notice{border:1px dashed var(--divider-color);border-radius:12px;padding:18px}
-        @media(max-width:480px){.floors,.areas,.controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        @media(max-width:480px){.floors,.areas,.controls,.scripts{grid-template-columns:repeat(2,minmax(0,1fr))}}
       </style><ha-card><header><h2>${escapeHtml(this.config.title||'Το σπίτι μου')}</h2><button class="refresh" data-refresh="1">↻ Ανανέωση</button></header>${body}</ha-card>`;
-      this.signature=entities.map(e=>{const s=this.ha?.states[e.entity_id];return e.entity_id+':'+s?.last_updated+':'+s?.state;}).join('|');
+      this.signature=entities.map(e=>{const s=this.ha?.states[e.entity_id];return e.entity_id+':'+s?.last_updated+':'+s?.state;}).join('|')+'|scripts:'+this.scriptSignature();
     }
     moreInfo(id){this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:id}}));}
     async service(domain,name,data){
@@ -261,12 +317,17 @@
       const btn=ev.target.closest('button');if(!btn||btn.disabled)return;
       const d=btn.dataset;
       if(d.refresh){await this.load(true);return;}
+      if(d.toggleScripts){this.scriptsCollapsed=!this.scriptsCollapsed;this.render();return;}
       if(d.floor){this.floor=d.floor;this.validateArea();this.render();return;}
       if(d.area){this.area=d.area;this.render();return;}
       if(d.info){this.moreInfo(d.info);return;}
       if(d.toggle){await this.service(d.toggle.split('.')[0],'toggle',{entity_id:d.toggle});return;}
       if(d.cmd){await this.service('cover',d.cmd,{entity_id:d.entity});return;}
-      if(d.run){await this.service(d.run.split('.')[0],'turn_on',{entity_id:d.run});return;}
+      if(d.run){
+        if(d.run.startsWith('script.')&&this.config.confirm_scripts===true &&
+          !window.confirm('Εκτέλεση script: '+this.name(d.run)+';'))return;
+        await this.service(d.run.split('.')[0],'turn_on',{entity_id:d.run});return;
+      }
       if(d.temp&&d.entity){
         const a=this.ha.states[d.entity]?.attributes||{},target=Number(a.temperature);
         if(!Number.isFinite(target)){this.moreInfo(d.entity);return;}
@@ -277,11 +338,82 @@
       }
     }
   }
+
+  // Shared visual editor: works for both a standalone dashboard strategy and
+  // the legacy custom Lovelace card. HA persists changes via config-changed.
+  class FloorAreaNavigatorEditor extends HTMLElement {
+    constructor(){
+      super();this.attachShadow({mode:'open'});this.config={};this.bound=false;
+    }
+    set hass(value){this._hass=value;}
+    setConfig(config){
+      const next={...(config||{})};
+      if(JSON.stringify(next)===JSON.stringify(this.config))return;
+      this.config=next;this.render();
+    }
+    connectedCallback(){
+      if(!this.bound){
+        this.bound=true;
+        const update=ev=>this.change(ev);
+        this.shadowRoot.addEventListener('input',update);
+        this.shadowRoot.addEventListener('change',update);
+      }
+      this.render();
+    }
+    change(ev){
+      const field=ev.target?.dataset?.field;
+      if(!field)return;
+      const target=ev.target, value=target.type==='checkbox'?target.checked:target.value;
+      // Keep the passed config.type, so this works for both card and strategy.
+      this.config={...this.config,[field]:value};
+      this.dispatchEvent(new CustomEvent('config-changed',{
+        detail:{config:{...this.config}},bubbles:true,composed:true
+      }));
+    }
+    render(){
+      if(!this.shadowRoot)return;
+      const c=this.config, checked=(k,def=true)=>(c[k]===undefined?def:c[k])?' checked':'';
+      this.shadowRoot.innerHTML=`<style>
+        :host{display:block;color:var(--primary-text-color);font-family:Roboto,Arial,sans-serif}
+        .editor{display:flex;flex-direction:column;gap:16px;padding:12px 4px}
+        h3{margin:0;font-size:16px}
+        label{display:flex;flex-direction:column;gap:6px;font-size:14px}
+        input[type="text"]{box-sizing:border-box;width:100%;border:1px solid var(--divider-color);border-radius:9px;
+          padding:12px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit}
+        .check{flex-direction:row;align-items:center;gap:10px}
+        input[type="checkbox"]{accent-color:var(--primary-color);width:18px;height:18px}
+        small{color:var(--secondary-text-color)}
+      </style><div class="editor">
+        <h3>Ρυθμίσεις Floor Area Navigator</h3>
+        <label>Τίτλος dashboard / κάρτας
+          <input type="text" data-field="title" value="${escapeHtml(c.title??'Το σπίτι μου')}">
+        </label>
+        <label class="check">
+          <input type="checkbox" data-field="show_scripts"${checked('show_scripts')}>
+          Εμφάνιση όλων των Scripts πάνω από τους ορόφους
+        </label>
+        <label>Τίτλος ενότητας Scripts
+          <input type="text" data-field="scripts_title" value="${escapeHtml(c.scripts_title??'Scripts · Γρήγορες εντολές')}">
+        </label>
+        <label class="check">
+          <input type="checkbox" data-field="scripts_collapsed"${checked('scripts_collapsed',false)}>
+          Αρχικά συμπτυγμένα Scripts
+        </label>
+        <label class="check">
+          <input type="checkbox" data-field="confirm_scripts"${checked('confirm_scripts',false)}>
+          Ζήτα επιβεβαίωση πριν από την εκτέλεση Script
+        </label>
+        <small>Τα Scripts, οι όροφοι και τα δωμάτια ανανεώνονται αυτόματα από το Home Assistant.
+        Οι αλλαγές του Visual Editor αποθηκεύονται από το Home Assistant όταν πατήσεις Save.</small>
+      </div>`;
+    }
+  }
   // Home Assistant 2026.5+ native dashboard strategy. Registers in the Community dashboards picker.
   // It generates a full panel dashboard from the existing self-populating card:
   // no YAML and no static list of rooms or entities are required.
   class FloorAreaDashboardStrategy extends HTMLElement {
-    static noEditor = true;
+    static noEditor = false;
+    static async getConfigElement(){return document.createElement('floor-area-navigator-strategy-editor');}
     static registryDependencies = ['floors', 'areas', 'devices', 'entities'];
     static getCreateSuggestions() {
       return { title: 'Το σπίτι μου', icon: 'mdi:home-floor-1' };
@@ -297,7 +429,11 @@
           panel: true,
           cards: [{
             type: 'custom:floor-area-navigator',
-            title
+            title,
+            show_scripts: config?.show_scripts!==false,
+            scripts_title: config?.scripts_title||'Scripts · Γρήγορες εντολές',
+            scripts_collapsed: config?.scripts_collapsed===true,
+            confirm_scripts: config?.confirm_scripts===true
           }]
         }]
       };
@@ -310,6 +446,12 @@
     const registry = window.customElements;
     if (!registry.get('floor-area-navigator')) {
       registry.define('floor-area-navigator', FloorAreaNavigator);
+    }
+    if (!registry.get('floor-area-navigator-editor')) {
+      registry.define('floor-area-navigator-editor', FloorAreaNavigatorEditor);
+    }
+    if (!registry.get('floor-area-navigator-strategy-editor')) {
+      registry.define('floor-area-navigator-strategy-editor', class extends FloorAreaNavigatorEditor {});
     }
     if (!registry.get('ll-strategy-dashboard-floor-area-navigator')) {
       registry.define('ll-strategy-dashboard-floor-area-navigator', FloorAreaDashboardStrategy);

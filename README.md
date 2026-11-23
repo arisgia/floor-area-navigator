@@ -2,7 +2,7 @@
 
 A **standalone, self-populating Home Assistant dashboard** that opens like Dwains Dashboard, with three-level navigation:
 
-**Floor → Area → Controls**
+**All scripts → Floor → Area → Controls**
 
 It automatically reads the Home Assistant floor, area, device and entity registries. Select a floor, then a room and control its lights, shutters/covers, climate, switches, fans, scenes, scripts and media players. Sensors and cameras are also available.
 
@@ -12,7 +12,7 @@ It automatically reads the Home Assistant floor, area, device and entity registr
 
 1. Open **Settings → Marketplace** (or **HACS** on earlier versions).
 2. Find your installed **Floor Area Navigator** custom repository.
-3. **Update / Redownload** it to get the new **standalone dashboard strategy**.
+3. **Update / Redownload** it to install the latest version (Scripts + Visual Editor).
 4. Refresh Home Assistant in your browser (Windows: **Ctrl + F5**).
 5. Open **Settings → Dashboards → Add dashboard**.
 6. Under **Community dashboards**, click **Floor Area Navigator**.
@@ -21,6 +21,32 @@ It automatically reads the Home Assistant floor, area, device and entity registr
 The dashboard generates its own full-width view automatically. You do **not** need a blank dashboard, Raw configuration editor, YAML or Manual card.
 
 > **Already installed the old card-only version?** You must update/re-download the repository first, then reload the Home Assistant frontend. The older 1.x version only provided a card, so it did not appear under Community dashboards.
+
+## New in 2.3 — Global scripts and Visual Editor
+
+### Scripts above all floors
+
+An **all-house Scripts** section now appears before the floor buttons. It discovers **all active `script.*` entities** in Home Assistant, even when a script isn't assigned to an Area. Scripts are alphabetically sorted by their display names.
+
+- Click **▶ Εκτέλεση** on a script to call `script.turn_on`.
+- Click **⋯** on its tile for Home Assistant's More Info panel.
+- Scripts created, renamed, or removed while the dashboard is open update automatically as the Home Assistant entity states change. The existing registry event listeners and 30-second fallback continue to handle device and area changes.
+- Scripts unavailable to Home Assistant cannot be run and their buttons are disabled.
+- If a script requires input fields or variables, use Home Assistant's own execution UI or edit the script to provide defaults.
+
+### Visual editor
+
+The standalone **dashboard strategy** and the optional **manual card** now each expose a visual configuration editor:
+
+- Dashboard/card title
+- Show/hide the global Scripts section (enabled by default)
+- Customize Scripts heading
+- Initially collapse/expand Scripts (expanded by default)
+- Require confirmation before running a script (disabled by default)
+
+Open **Edit dashboard → Dashboard settings / Edit strategy** to find the strategy editor when supported by your Home Assistant frontend. For the manual card, choose **Edit card → Visual**. Edit options and click Save. No YAML is needed for these settings.
+
+The visual editor is for dashboard-wide options; it **does not yet support dragging individual entity buttons or repositioning arbitrary Lovelace cards**. Floor and area ordering comes from Home Assistant's Floor/Area assignments.
 
 ## How it works
 
@@ -74,4 +100,4 @@ In Home Assistant, go to **Settings → Areas, labels & zones**, define Floors, 
 
 ## Version
 
-2.2.0 — automatic registry sync + physical floor order. Dashboard strategy introduced in v2.0. Changes have passed syntax and simulated registration/ordering/device-add tests; not yet verified in the user's running instance.
+2.3.0 — global auto-updating scripts panel and visual editors (strategy + card); retains v2.2 automatic registry sync and floor ordering. Syntax and simulated frontend tests passed; final real-device verification is still needed.

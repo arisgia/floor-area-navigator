@@ -38,7 +38,7 @@
     ];
     for(const [pattern,level] of words)if(label.includes(pattern))return level;
     // Greek-letter floor shorthand, e.g. Α' όροφος, Β' όροφος.
-    const letter=label.match(/^(?:οροφος\s*)?([αβγδεζηθ])(?:['’´.\s-]|$)/);
+    const letter=label.match(/^(?:οροφος\s*)?([αβγδεζηθ])(?:['’΄´ʹ′ʹ.\s-]|$)/);
     if(letter)return {α:1,β:2,γ:3,δ:4,ε:5,ζ:6,η:7,θ:8}[letter[1]]??null;
     return null;
   };

@@ -1,4 +1,4 @@
-/* Floor Area Navigator 2.1 - automatic registry synchronization, standalone dashboard + card. */
+/* Floor Area Navigator 2.2 - automatic registry synchronization + physical floor ordering. */
 (() => {
   'use strict';
   // Guard against loading the same frontend resource twice in one page session.
@@ -14,6 +14,46 @@
   const DOMAINS = new Set(GROUPS.map(a => a[0]));
   const icon = (value, fallback) => value && value.startsWith('mdi:') ?
     '<ha-icon icon="' + escapeHtml(value) + '"></ha-icon>' : escapeHtml(value || fallback);
+  // Physical order of floors: basement -2, basement -1, ground 0, first 1,
+  // second 2, roof at the top. Prefer explicit HA level when configured.
+  // When every HA level is empty/zero, infer the level from Greek/English names.
+  const numericLevel = floor => {
+    const value=floor.level;
+    return value===null||value===undefined||value===''||!Number.isFinite(Number(value))
+      ? null : Number(value);
+  };
+  const inferredLevel = name => {
+    const label=String(name||'').toLocaleLowerCase('el')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    const digit=label.match(/-?\d+/);
+    const number=digit ? Number(digit[0]) : null;
+    if(/υπογει|basement|underground|υποσταθ|^(?:b|β)\s*-?\d/.test(label))
+      return -Math.max(1,Math.abs(number??1));
+    if(/ισογει|ground\s*floor|ground\s*level|pilotis|πυλωτ|ισογε/.test(label))return 0;
+    if(/δωμα|ταρατσ|roof|terrace|attic|ρετιρε/.test(label))return 100;
+    if(number!==null && /οροφ|floor|level|επιπεδ|^(?:-?\d+)/.test(label))return number;
+    const words=[
+      ['πρωτ',1],['first',1],['δευτερ',2],['second',2],['τριτ',3],['third',3],
+      ['τεταρτ',4],['fourth',4],['πεμπτ',5],['fifth',5],['εκτ',6],['sixth',6]
+    ];
+    for(const [pattern,level] of words)if(label.includes(pattern))return level;
+    // Greek-letter floor shorthand, e.g. Α' όροφος, Β' όροφος.
+    const letter=label.match(/^(?:οροφος\s*)?([αβγδεζηθ])(?:['’´.\s-]|$)/);
+    if(letter)return {α:1,β:2,γ:3,δ:4,ε:5,ζ:6,η:7,θ:8}[letter[1]]??null;
+    return null;
+  };
+  const compareFloorOrder=(floors) => {
+    const levels=floors.map(numericLevel).filter(level=>level!==null);
+    const explicitLevelsUseful=new Set(levels).size>1;
+    const order=f=>{
+      const explicit=numericLevel(f);
+      const inferred=inferredLevel(f.name);
+      if(explicitLevelsUseful && explicit!==null)return explicit;
+      return inferred??explicit??999;
+    };
+    return [...floors].sort((a,b)=>order(a)-order(b)||
+      String(a.name||'').localeCompare(String(b.name||''),'el',{numeric:true}));
+  };
   class FloorAreaNavigator extends HTMLElement {
     constructor() {
       super();
@@ -69,7 +109,7 @@
             .catch(error=>console.warn('[Floor Area Navigator] Subscription unavailable:',type,error));
         }
       }
-      this.pollTimer=window.setInterval(()=>this.scheduleRefresh(),60000);
+      this.pollTimer=window.setInterval(()=>this.scheduleRefresh(),30000);
       this.focusListener=()=>this.scheduleRefresh();
       window.addEventListener('focus',this.focusListener);
       this.visibilityListener=()=>{if(!document.hidden)this.scheduleRefresh();};
@@ -108,7 +148,7 @@
           this.ha.callWS({type:'config/device_registry/list'}),
           this.ha.callWS({type:'config/entity_registry/list'})
         ]);
-        this.floors=floors.sort((a,b)=>(Number(a.level||0)-Number(b.level||0))||a.name.localeCompare(b.name,'el'));
+        this.floors=compareFloorOrder(floors);
         this.areas=areas.sort((a,b)=>a.name.localeCompare(b.name,'el'));
         this.devices=new Map(devices.map(d=>[d.id,d]));
         this.entities=entities.filter(e=>!e.disabled_by&&!e.hidden_by&&!e.entity_category&&DOMAINS.has(e.entity_id.split('.')[0]));
